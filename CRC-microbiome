@@ -40,7 +40,7 @@ ao <-available_outcomes(access_token = ieugwasr::check_access_token())
 ao_microbiota<-ao[which(ao$author == "Kurilshikov A"),]
 ao_microbiota_genus<-ao[grepl("genus", ao$trait), ]
 
-#这里选择暴露为microbiome genus）， 结局为 CRC ieu-b-4965
+#Exposure: microbiome genus， Outcome:CRC ieu-b-4965
 
 mb_gwas<-ao_microbiota_genus$id
 exp_dat <- extract_instruments(outcomes= mb_gwas,p1 = 1e-05,p2 = 1e-05,
