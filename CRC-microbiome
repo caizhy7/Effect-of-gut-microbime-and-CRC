@@ -1,0 +1,92 @@
+####2022-11-28 Zhiyuan Cai####
+
+####download SRAdata####
+prefetch SRRnum
+
+####SRA-to-fastq####
+fastq-dump --split-3 --readids SRRnum 
+
+
+####kneaddata####
+kneaddata -t 16 --input SRRnum_1.fastq --input SRRnum_2.fastq --output kneaddata_demo_output --trimmomatic trimmomatic-0.39-2/ --trimmomatic-options 'ILLUMINACLIP:trimmomatic-0.39-2/adapters/TruSeq3-PE.fa:2:40:15 SLIDINGWINDOW:4:20 MINLEN:50' --reference-db database/kneaddata/ --bowtie2-options '--very-sensitive --dovetail' --remove-intermediate-output
+
+####metaphlan2####
+metaphlan2.py --input_type fastq <(cat SRRnum_kneaddata_paired_?.fastq) >  SRRnum.tsv 
+
+
+####MMUPHin####
+fit_adjust_batch <- adjust_batch(feature_abd = crc_ddcount,
+                                 batch = "batch",
+                                 covariates = "group",
+                                 data = csif)
+CRC_abd_adj <- fit_adjust_batch$feature_abd_adj
+
+fit_lm_meta <- lm_meta(feature_abd = CRC_abd_adj,
+                       batch = "batch",
+                       exposure = "group",
+                       data = csif,
+                       control = list(verbose = FALSE))
+
+
+
+
+
+options(stringsAsFactors = F)
+library(TwoSampleMR)
+library(MRPRESSO)
+
+ao <-available_outcomes(access_token = ieugwasr::check_access_token())
+
+ao_microbiota<-ao[which(ao$author == "Kurilshikov A"),]
+ao_microbiota_genus<-ao[grepl("genus", ao$trait), ]
+
+#这里选择暴露为microbiome genus）， 结局为 CRC ieu-b-4965
+
+mb_gwas<-ao_microbiota_genus$id
+exp_dat <- extract_instruments(outcomes= mb_gwas,p1 = 1e-05,p2 = 1e-05,
+                               r2= 0.1, kb = 500000,access_token=NULL) #p1 = 5e-08,ieugwasr::check_access_token()
+
+fi<-data.frame(matrix(NA,length(exp_dat$pval.exposure),2))
+for (g in 1:length(exp_dat$pval.exposure)) {
+  fi[g,1]<-exp_dat$SNP[g]
+  
+  R2<-get_r_from_pn(exp_dat$pval.exposure[g],14306)
+  print(R2*(14306-12)/((1-R2)*11))
+  fi[g,2]<-R2*(14306-12)/((1-R2)*11)
+}
+
+outcomes_gwas<-"ieu-b-4965"
+pd_out_dat <- extract_outcome_data(snps=microbiota_exp_dat$SNP, outcomes=outcomes_gwas, access_token=NULL)
+dat <- harmonise_data(exposure_dat =microbiota_exp_dat, outcome_dat= pd_out_dat)
+
+res <- mr(dat)
+print(res$pval)
+
+
+#mr_heterogeneity
+mr_heterogeneity(dat)
+
+#MR Egger 
+mr_pleiotropy_test(dat)
+
+p1 <-mr_scatter_plot(res, dat)
+p1
+
+res_single <- mr_singlesnp(dat)
+p2 <- mr_forest_plot(res_single)
+p2[[1]]
+
+single <- mr_leaveoneout(dat)
+p3<-mr_leaveoneout_plot(single)
+p3
+
+#mr_funnel_plot
+res_single <- mr_singlesnp(dat)
+p4 <- mr_funnel_plot(res_single)
+p4[[1]]
+
+
+mr_presso(BetaOutcome ="beta.outcome", BetaExposure = "beta.exposure", SdOutcome ="se.outcome", SdExposure = "se.exposure", 
+          OUTLIERtest = TRUE,DISTORTIONtest = TRUE, data = dat, NbDistribution = 1000,  
+          SignifThreshold = 0.05)
+
